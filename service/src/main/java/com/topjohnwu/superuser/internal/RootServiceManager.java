@@ -53,6 +53,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -146,6 +147,26 @@ public class RootServiceManager implements Handler.Callback {
 
     private RootServiceManager() {}
 
+    @SuppressLint("PrivateApi")
+    private boolean isSupportNativeBridge() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M)
+            return false;
+        // We only supported the x86_64 platform.
+        if (!"x86_64".equals(Build.SUPPORTED_ABIS[0]))
+            return false;
+
+        try {
+            Class<?> SystemProperties = Class.forName("android.os.SystemProperties");
+            Method get = SystemProperties.getMethod("get", String.class);
+            String nativeBridgeProvider = (String)get.invoke(SystemProperties, "ro.dalvik.vm.native.bridge");
+
+            return !"".equals(nativeBridgeProvider) && !"0".equals(nativeBridgeProvider);
+        } catch (Exception e) {
+            Utils.log(TAG, e.getMessage());
+            return false;
+        }
+    }
+
     @SuppressLint("InlinedApi")
     private Shell.Task startRootProcess(ComponentName name, String action) {
         Context context = Utils.getContext();
@@ -174,6 +195,8 @@ public class RootServiceManager implements Handler.Callback {
         return (stdin, stdout, stderr) -> {
             Context ctx = Utils.getDeContext();
             File mainJar = new File(ctx.getCacheDir(), "main.jar");
+            boolean isNativeBridgeSupported = isSupportNativeBridge();
+            File nativeBridge = new File(ctx.getCacheDir(), "libnativebridgehijack.so");
 
             // Dump main.jar as trampoline
             try (InputStream in = ctx.getResources().getAssets().open("main.jar");
@@ -181,6 +204,15 @@ public class RootServiceManager implements Handler.Callback {
                 Utils.pump(in, out);
             }
 
+            // Dump libnativebridgehijack.so as trampoline
+            if (isNativeBridgeSupported) {
+                try (InputStream in = ctx.getResources().getAssets().open(Build.SUPPORTED_ABIS[0] + "/libnativebridgehijack.so");
+                     OutputStream out = new FileOutputStream(nativeBridge)) {
+                    Utils.pump(in, out);
+                }
+            }
+
+            String setup = "";
             String env = "";
             String params = "";
 
@@ -203,6 +235,14 @@ public class RootServiceManager implements Handler.Callback {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 params += " -Xnoimage-dex2oat";
             }
+            if (isNativeBridgeSupported) {
+                setup += String.format(
+                        "cd %s && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:. &&",
+                        nativeBridge.getParent()
+                );
+
+                params += String.format(" -Xforce-nb-testing -XX:NativeBridge=%s", nativeBridge.getName());
+            }
 
             final String niceNameCmd;
             switch (action) {
@@ -224,9 +264,9 @@ public class RootServiceManager implements Handler.Callback {
                 app_process += Utils.isProcess64Bit() ? "64" : "32";
             }
             String cmd = String.format(Locale.ROOT,
-                    "(%s CLASSPATH=%s %s %s /system/bin %s " +
+                    "%s (%s CLASSPATH=%s %s %s /system/bin %s " +
                     "com.topjohnwu.superuser.internal.RootServerMain '%s' %d %s >/dev/null 2>&1)&",
-                    env, mainJar, app_process, params, niceNameCmd,
+                    setup, env, mainJar, app_process, params, niceNameCmd,
                     name.flattenToString(),   // args[0]
                     Process.myUid(),          // args[1]
                     action);                  // args[2]

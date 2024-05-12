@@ -15,6 +15,18 @@ android {
     buildFeatures {
         aidl = true
     }
+
+    defaultConfig {
+        ndk {
+            abiFilters += listOf("x86_64")
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+        }
+    }
 }
 
 android.libraryVariants.all {
