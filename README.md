@@ -6,6 +6,8 @@ An Android library providing a complete solution for apps using root permissions
 
 `libsu` comes with 2 main components: the `core` module handles the creation of the Unix (root) shell process and wraps it with high level, robust Java APIs; the `service` module handles the launching, binding, and management of root services over IPC, allowing you to run Java/Kotlin and C/C++ code (via JNI) with root permissions.
 
+It's supported NativeBridge in Android emulator now.
+
 ## [Changelog](./CHANGELOG.md)
 
 ## [Javadoc](https://topjohnwu.github.io/libsu/)
