@@ -1,0 +1,10 @@
+{
+    "cmake.configureArgs": [
+        "-DTEST_BUILD=ON"
+    ],
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "files.associations": {
+        "*.cc": "cpp",
+        "string": "cpp"
+    }
+}
